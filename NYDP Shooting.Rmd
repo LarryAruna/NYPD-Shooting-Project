@@ -1,0 +1,159 @@
+---
+title: "NYPD Shooting Incident Data (Historic)."
+author: "Larry Aruna"
+date: "2024-05-31"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Step 0: Import Library
+
+```{r library, message=FALSE, warning=FALSE}
+# install.packages("tidyverse")
+library(tidyverse)
+library(lubridate)
+```
+
+## R Markdown
+
+Access the NYDP Shooting Data set
+
+```{r Load HYDP Historing}
+NYDP_History <- read.csv("https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv?accessType=DOWNLOAD")
+head(NYDP_History)
+```
+
+## Data Preproccessing 
+
+```{r wanted columns }
+NYDP_History_01 = NYDP_History %>% select(INCIDENT_KEY, 
+                     OCCUR_DATE,
+                     OCCUR_TIME,
+                     BORO, 
+                     STATISTICAL_MURDER_FLAG,
+                     VIC_AGE_GROUP,
+                     X_COORD_CD,
+                     Y_COORD_CD,
+                     VIC_SEX,
+                     VIC_RACE,
+                     Latitude,
+                     Longitude)
+# Return the column name along with the missing values
+lapply(NYDP_History_01, function(x) sum(is.na(x)))
+```
+
+
+```{r Remove missing value from Longtitude column}
+# Tidy and transform data
+# Remove missing value from Longitude column
+NYDP_History_02 =  NYDP_History_01 %>% filter(!is.na(Longitude))
+
+NYDP_History_02$INCIDENT_KEY = as.character(NYDP_History_02$INCIDENT_KEY)
+NYDP_History_02$BORO = as.factor(NYDP_History_02$BORO)
+NYDP_History_02$VIC_AGE_GROUP = as.factor(NYDP_History_02$VIC_AGE_GROUP)
+NYDP_History_02$VIC_SEX = as.factor(NYDP_History_02$VIC_SEX)
+NYDP_History_02$VIC_RACE = as.factor(NYDP_History_02$VIC_RACE)
+NYDP_History_02$STATISTICAL_MURDER_FLAG = as.factor(NYDP_History_02$STATISTICAL_MURDER_FLAG)
+
+# Return summary statistics
+summary(NYDP_History_02)
+
+```
+
+## Including Plots
+
+Which part of New York has the most number of incidents? Of those incidents.
+
+```{r pressure, echo=FALSE}
+g <- ggplot(NYDP_History_02, aes(x = BORO, colour = BORO)) +
+  geom_bar() +
+  labs(title = "Boroughs of New York City",
+       x = "Boroughs of New York City",
+       y = "Count of Incidents") +
+   theme_minimal()
+g
+```
+
+```{r}
+# Group the data based on Statistical murder flag
+table(NYDP_History_02$BORO, NYDP_History_02$STATISTICAL_MURDER_FLAG)
+```
+
+Which day and time should people in New York be cautious of falling into victims of crime?
+ 
+```{r}
+NYDP_History_02$OCCUR_DAY = mdy(NYDP_History_02$OCCUR_DATE)
+NYDP_History_02$OCCUR_DAY = wday(NYDP_History_02$OCCUR_DAY, label = TRUE)
+NYDP_History_02$OCCUR_HOUR = hour(hms(as.character(NYDP_History_02$OCCUR_TIME)))
+
+NYDP_History_03 = NYDP_History_02 %>%
+  group_by(OCCUR_DAY) %>%
+  count()
+
+NYDP_History_04 = NYDP_History_02 %>%
+  group_by(OCCUR_HOUR) %>%
+  count()
+``` 
+ 
+```{r}
+g <- ggplot(NYDP_History_03, aes(x = OCCUR_DAY, y = n ,colour = OCCUR_DAY)) +
+  geom_col() +
+  labs(title = "Which day should people in New York be cautious of incidents?",
+       x = "Incident Occurence Day",
+       y = "Count of Incidents") +
+  theme_minimal()
+g
+```
+
+```{r}
+g <- ggplot(NYDP_History_04, aes(x = OCCUR_HOUR, y = n)) +
+  geom_line() +
+  labs(title = "Which time should people in New York be cautious of incidents?",
+       x = "Incident Occurence Hour",
+       y = "Count of Incidents") +
+  theme_minimal()
+g
+```
+
+The Profile of Perpetrators and Victims
+
+```{r PERP_AGE_GROUP }
+table(NYDP_History_02$VIC_AGE_GROUP)
+```
+
+```{r PERP_SEX}
+table(NYDP_History_02$VIC_SEX)
+```
+
+```{r PERP_RACE}
+table(NYDP_History_02$VIC_RACE)
+```
+ 
+## Building logistic regression model
+
+```{r Logistics Model}
+# Logistics Regression 
+glm.fit <- glm(STATISTICAL_MURDER_FLAG ~ VIC_RACE + VIC_SEX + VIC_AGE_GROUP + OCCUR_HOUR + OCCUR_DAY + Latitude + Longitude, data = NYDP_History_02, family = "binomial")
+summary(glm.fit)
+```
+
+The model outcome turns out that variable Age group is  significant value that associated with Statistical murder flap based on p value less than 0.05. 
+
+```{r  Significant Logistics Model}
+one_glm.fit <- glm(STATISTICAL_MURDER_FLAG ~ VIC_AGE_GROUP, data = NYDP_History_02, family = "binomial")
+
+summary(one_glm.fit)
+```
+
+## Step 4: Identify Bias
+
+The first thinking about this topic project without review and analyze the data was based on discrimination and hate crime and social media contribute to bias as well. By looking at some specific interested columns in my analyzing with column city where crime occurred, city like Bronx, Brooklyn, Manhattan, Queens and it turns out Brooklyn has a highest hate crime. Also looking at the specific days column (Sun, Mon, Tue, Wed, Thursday, Friday and Saturday) and it turns out Sunday and Saturday are the highest days for hate crimes. All these contribute to bias in NYPD Shooting incident. How do I handle a missing value and fit a model on Statistical murder flag also contribute to a bias.  
+
+## Conclusion 
+Based on the Analyzing of the NYPD data and the visualization reports. The model suggested that Age Group variable which has P-vale 0,005 less than alpha is significantly associated with dependence Statistical Murder flag variable response.That suggests, if any changes in Age group value will change the Statistical Murder flag. Based on the summary report, is good to evaluate the model with either Backward and forward selection on variables predictors. Do more analyses on model interactions.   
